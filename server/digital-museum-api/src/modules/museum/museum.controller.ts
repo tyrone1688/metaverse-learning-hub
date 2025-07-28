@@ -54,13 +54,53 @@ export class MuseumController {
   )
   async createWork(
     @Body() createWorkDto: CreateWorkDto,
-    @UploadedFiles() files: Array<Express.Multer.File>,
+    @UploadedFiles() files?: Array<Express.Multer.File>,
   ) {
-    return {
-      statusCode: HttpStatus.CREATED,
-      message: '作品创建成功',
-      data: await this.museumService.createWork(createWorkDto, files),
-    };
+    try {
+      console.log('=== 创建作品请求开始 ===');
+      console.log('请求数据:', createWorkDto);
+      console.log('上传文件:', files);
+      
+      const result = await this.museumService.createWork(createWorkDto, files);
+      
+      console.log('创建成功:', result);
+      console.log('=== 创建作品请求结束 ===');
+      
+      return {
+        statusCode: HttpStatus.CREATED,
+        message: '作品创建成功',
+        data: result,
+      };
+    } catch (error) {
+      console.error('=== 创建作品失败 ===');
+      console.error('错误详情:', error);
+      console.error('错误堆栈:', error.stack);
+      throw error;
+    }
+  }
+
+  // 添加一个简化的测试接口
+  @Post('works/simple')
+  @ApiOperation({ summary: '创建作品（简化测试版）' })
+  async createWorkSimple(@Body() createWorkDto: CreateWorkDto) {
+    try {
+      console.log('=== 简化创建作品请求 ===');
+      console.log('请求数据:', createWorkDto);
+      
+      const result = await this.museumService.createWork(createWorkDto);
+      
+      console.log('简化创建成功:', result);
+      
+      return {
+        statusCode: HttpStatus.CREATED,
+        message: '作品创建成功（简化版）',
+        data: result,
+      };
+    } catch (error) {
+      console.error('=== 简化创建失败 ===');
+      console.error('错误详情:', error);
+      throw error;
+    }
   }
 
   @Get('works')
