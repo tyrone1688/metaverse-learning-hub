@@ -21,38 +21,51 @@ export class MuseumService {
       modelUrl: null,
     };
 
-    // 处理上传的文件
     if (files && files.length > 0) {
       for (const file of files) {
-        const relativePath = file.path.replace(/\\/g, '/'); // Windows路径转换
-        switch (file.fieldname) {
-          case 'images':
-            workData.images.push(relativePath);
-            break;
-          case 'audio':
-            workData.audioUrl = relativePath;
-            break;
-          case 'certificate':
-            workData.certificateUrl = relativePath;
-            break;
-          case 'model':
-            workData.modelUrl = relativePath;
-            break;
+        // 修复路径处理，确保路径格式正确
+        let relativePath = file.path.replace(/\\/g, '/');
+        
+        // 确保路径以 uploads 开始
+        if (!relativePath.startsWith('uploads/')) {
+          const pathParts = relativePath.split('/');
+          const filename = pathParts[pathParts.length - 1];
+          
+          if (file.path.includes('images')) {
+            relativePath = `uploads/images/${filename}`;
+          } else if (file.path.includes('audio')) {
+            relativePath = `uploads/audio/${filename}`;
+          } else if (file.path.includes('certificates')) {
+            relativePath = `uploads/certificates/${filename}`;
+          } else if (file.path.includes('models')) {
+            relativePath = `uploads/models/${filename}`;
+          }
+        }
+        
+        console.log(`处理文件: ${file.originalname}, 最终路径: ${relativePath}`);
+        
+        if (file.path.includes('images')) {
+          workData.images.push(relativePath);
+        } else if (file.path.includes('audio')) {
+          workData.audioUrl = relativePath;
+        } else if (file.path.includes('certificates')) {
+          workData.certificateUrl = relativePath;
+        } else if (file.path.includes('models')) {
+          workData.modelUrl = relativePath;
         }
       }
     }
 
+    console.log('最终保存的作品数据:', workData);
     const createdWork = new this.awardWorkModel(workData);
     return createdWork.save();
   }
-
   async getWorks(query: GetWorksDto) {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const { category, year, keyword, status } = query;
     const skip = (page - 1) * limit;
 
-    // 构建查询条件
     const filter: any = {};
     
     if (category) {
@@ -77,7 +90,6 @@ export class MuseumService {
       ];
     }
 
-    // 执行查询
     const [works, total] = await Promise.all([
       this.awardWorkModel
         .find(filter)
@@ -105,7 +117,6 @@ export class MuseumService {
       throw new NotFoundException(`作品 ID ${id} 未找到`);
     }
 
-    // 增加浏览次数
     await this.awardWorkModel.findByIdAndUpdate(
       id,
       { $inc: { viewCount: 1 } },

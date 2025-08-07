@@ -48,10 +48,10 @@ export const museumApi = {
   getWork: (id: string) =>
     api.get(`/api/museum/works/${id}`),
 
-  // 创建作品 - 使用简化版本
-  createWork: (data: CreateWorkData) =>
-    api.post('/api/museum/works/simple', data, {
-      headers: { 'Content-Type': 'application/json' },
+  // 创建作品 - 支持文件上传
+  createWork: (data: FormData) =>
+    api.post('/api/museum/works', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
   // 更新作品

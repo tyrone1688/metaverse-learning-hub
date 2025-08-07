@@ -82,6 +82,17 @@
             />
             <div class="work-overlay">
               <el-button type="primary" size="small">查看详情</el-button>
+              <div class="file-indicators">
+                <el-icon v-if="work.audioUrl" class="file-icon audio-icon" title="包含音频">
+                  <Microphone />
+                </el-icon>
+                <el-icon v-if="work.certificateUrl" class="file-icon cert-icon" title="包含证书">
+                  <Document />
+                </el-icon>
+                <el-icon v-if="work.modelUrl" class="file-icon model-icon" title="包含3D模型">
+                  <Box />
+                </el-icon>
+              </div>
             </div>
           </div>
           <div class="work-info">
@@ -103,6 +114,14 @@
                 <el-icon><View /></el-icon>
                 {{ work.viewCount }}
               </span>
+              <div class="action-buttons">
+                <el-button size="small" type="warning" @click.stop="editWork(work)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+                <el-button size="small" type="danger" @click.stop="deleteWork(work)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
               <el-tag :type="getStatusType(work.status)" size="small">
                 {{ getStatusText(work.status) }}
               </el-tag>
@@ -126,67 +145,26 @@
     </div>
 
     <!-- 创建作品对话框 -->
-    <el-dialog
-      v-model="showCreateDialog"
-      title="创建新作品"
-      width="600px"
-      :before-close="handleCloseCreateDialog"
-    >
-      <div class="create-form">
-        <p class="form-hint">请填写基本信息来创建作品（暂时简化版本）</p>
-        <el-form :model="newWork" label-width="80px">
-          <el-form-item label="标题">
-            <el-input v-model="newWork.title" placeholder="请输入作品标题" />
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input
-              v-model="newWork.description"
-              type="textarea"
-              :rows="3"
-              placeholder="请输入作品描述"
-            />
-          </el-form-item>
-          <el-form-item label="分类">
-            <el-input v-model="newWork.category" placeholder="如：人工智能、机器人等" />
-          </el-form-item>
-          <el-form-item label="作者">
-            <el-input v-model="newWork.author" placeholder="请输入作者姓名" />
-          </el-form-item>
-          <el-form-item label="学校">
-            <el-input v-model="newWork.school" placeholder="请输入学校名称" />
-          </el-form-item>
-          <el-form-item label="年份">
-            <el-date-picker
-              v-model="newWork.year"
-              type="year"
-              placeholder="选择年份"
-              value-format="YYYY"
-              style="width: 100%"
-            />
-          </el-form-item>
-        </el-form>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="showCreateDialog = false">取消</el-button>
-          <el-button type="primary" @click="handleCreateWork" :loading="creating">
-            创建作品
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
+    <WorkCreateDialog
+      v-model:visible="showCreateDialog"
+      @success="handleCreateSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Search, View, Plus } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, View, Plus, Microphone, Document, Box, Edit, Delete } from '@element-plus/icons-vue'
 import { museumApi, type AwardWork, type GetWorksParams } from '@/services/museum'
+import WorkCreateDialog from '@/components/WorkCreateDialog.vue'
+import { useRouter } from 'vue-router'
+
+// 在 setup 函数中
+const router = useRouter()
 
 // 响应式数据
 const loading = ref(false)
-const creating = ref(false)
 const searchKeyword = ref('')
 const showCreateDialog = ref(false)
 
@@ -205,15 +183,6 @@ const pagination = reactive({
   total: 0
 })
 
-const newWork = reactive({
-  title: '',
-  description: '',
-  category: '',
-  author: '',
-  school: '',
-  year: new Date().getFullYear()
-})
-
 // 计算属性
 const yearOptions = computed(() => {
   const currentYear = new Date().getFullYear()
@@ -226,7 +195,7 @@ const yearOptions = computed(() => {
 
 // 方法
 const getImageUrl = (imagePath: string) => {
-  if (!imagePath) return '/placeholder-image.jpg'
+  if (!imagePath) return 'https://via.placeholder.com/300x200?text=暂无图片'
   return imagePath.startsWith('http') 
     ? imagePath 
     : `${import.meta.env.VITE_UPLOAD_URL}/${imagePath}`
@@ -306,56 +275,39 @@ const handleCurrentChange = (page: number) => {
 }
 
 const viewWorkDetail = (work: AwardWork) => {
-  ElMessage.info(`查看作品：${work.title}（详情页面待开发）`)
+  router.push(`/museum/work/${work._id}`)
 }
 
-const handleCreateWork = async () => {
-  if (!newWork.title || !newWork.description || !newWork.author) {
-    ElMessage.warning('请填写必要信息')
-    return
-  }
+const handleCreateSuccess = () => {
+  showCreateDialog.value = false
+  loadWorks()
+  ElMessage.success('作品创建成功')
+}
 
-  creating.value = true
+const editWork = (work: AwardWork) => {
+  ElMessage.info(`编辑作品：${work.title}（编辑功能开发中）`)
+}
+
+const deleteWork = async (work: AwardWork) => {
   try {
-    const workData = {
-      title: newWork.title,
-      description: newWork.description,
-      category: newWork.category,
-      author: newWork.author,
-      school: newWork.school,
-      year: Number(newWork.year),
-      status: 'published'
-    }
-
-    console.log('准备发送数据:', workData)
-    await museumApi.createWork(workData)
+    await ElMessageBox.confirm(
+      `确定要删除作品"${work.title}"吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
     
-    ElMessage.success('作品创建成功')
-    showCreateDialog.value = false
-    resetNewWork()
+    await museumApi.deleteWork(work._id)
+    ElMessage.success('删除成功')
     loadWorks()
   } catch (error) {
-    ElMessage.error('创建作品失败')
-    console.error(error)
-  } finally {
-    creating.value = false
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
   }
-}
-
-const resetNewWork = () => {
-  Object.assign(newWork, {
-    title: '',
-    description: '',
-    category: '',
-    author: '',
-    school: '',
-    year: new Date().getFullYear()
-  })
-}
-
-const handleCloseCreateDialog = () => {
-  showCreateDialog.value = false
-  resetNewWork()
 }
 
 // 生命周期
@@ -447,6 +399,7 @@ onMounted(() => {
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   opacity: 0;
@@ -455,6 +408,32 @@ onMounted(() => {
 
 .work-card:hover .work-overlay {
   opacity: 1;
+}
+
+.file-indicators {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.file-icon {
+  width: 20px;
+  height: 20px;
+  padding: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.audio-icon {
+  color: #e6a23c;
+}
+
+.cert-icon {
+  color: #67c23a;
+}
+
+.model-icon {
+  color: #409eff;
 }
 
 .work-info {
@@ -505,26 +484,14 @@ onMounted(() => {
   font-size: 0.85rem;
 }
 
+.action-buttons {
+  display: flex;
+  gap: 4px;
+}
+
 .pagination-section {
   display: flex;
   justify-content: center;
   margin-top: 40px;
-}
-
-.create-form {
-  margin: 20px 0;
-}
-
-.form-hint {
-  color: #666;
-  font-size: 0.9rem;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
 }
 </style>

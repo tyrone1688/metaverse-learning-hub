@@ -14,7 +14,8 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { extname } from 'path';
+import * as fs from 'fs';
 import { MuseumService } from './museum.service';
 import { CreateWorkDto } from './dto/create-work.dto';
 import { GetWorksDto } from './dto/get-works.dto';
@@ -28,42 +29,100 @@ export class MuseumController {
   @ApiOperation({ summary: '创建作品' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FilesInterceptor('files', 10, {
+    FilesInterceptor('files', 20, {
       storage: diskStorage({
-        destination: './uploads',
+        destination: (req, file, callback) => {
+          let uploadPath = './uploads';
+          if (file.mimetype.startsWith('image/')) {
+            uploadPath = './uploads/images';
+          } else if (file.mimetype.startsWith('audio/')) {
+            uploadPath = './uploads/audio';
+          } else if (file.mimetype === 'application/pdf') {
+            uploadPath = './uploads/certificates';
+          } else if (file.originalname.match(/\.(obj|fbx|gltf|glb)$/i)) {
+            uploadPath = './uploads/models';
+          }
+          
+          if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+          }
+          
+          callback(null, uploadPath);
+        },
         filename: (req, file, callback) => {
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          callback(null, file.fieldname + '-' + uniqueSuffix + extname(file.originalname));
+          const ext = extname(file.originalname);
+          callback(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
         },
       }),
       fileFilter: (req, file, callback) => {
-        const allowedTypes = /jpeg|jpg|png|gif|mp3|wav|pdf|obj|fbx|gltf|glb/;
+        const allowedTypes = /jpeg|jpg|png|gif|mp3|wav|mp4|pdf|obj|fbx|gltf|glb/;
         const extName = allowedTypes.test(extname(file.originalname).toLowerCase());
-        const mimeType = allowedTypes.test(file.mimetype);
+        const mimeType = file.mimetype.startsWith('image/') || 
+                        file.mimetype.startsWith('audio/') ||
+                        file.mimetype.startsWith('video/') ||
+                        file.mimetype === 'application/pdf' ||
+                        allowedTypes.test(file.mimetype);
         
-        if (mimeType && extName) {
+        if (mimeType || extName) {
           return callback(null, true);
         } else {
           callback(new Error('不支持的文件类型'), false);
         }
       },
       limits: {
-        fileSize: 50 * 1024 * 1024, // 50MB
+        fileSize: 100 * 1024 * 1024,
       },
     }),
   )
   async createWork(
-    @Body() createWorkDto: CreateWorkDto,
+    @Body() body: any,
     @UploadedFiles() files?: Array<Express.Multer.File>,
   ) {
     try {
       console.log('=== 创建作品请求开始 ===');
-      console.log('请求数据:', createWorkDto);
-      console.log('上传文件:', files);
+      console.log('原始body数据:', body);
+      console.log('上传文件:', files?.map(f => ({ 
+        fieldname: f.fieldname, 
+        filename: f.filename, 
+        originalname: f.originalname,
+        size: f.size,
+        mimetype: f.mimetype,
+        path: f.path
+      })));
       
+      const createWorkDto: CreateWorkDto = {
+        title: body.title,
+        description: body.description,
+        category: body.category,
+        year: parseInt(body.year),
+        author: body.author,
+        school: body.school,
+        status: body.status || 'draft',
+        tags: []
+      };
+
+      if (body.tags) {
+        if (Array.isArray(body.tags)) {
+          createWorkDto.tags = body.tags.filter(tag => tag && tag.trim() !== '');
+        } else if (typeof body.tags === 'string' && body.tags.trim() !== '') {
+          createWorkDto.tags = [body.tags.trim()];
+        }
+      }
+
+      console.log('处理后的数据:', createWorkDto);
+
+      if (!createWorkDto.title || !createWorkDto.description || !createWorkDto.author) {
+        throw new Error('缺少必填字段');
+      }
+
+      if (isNaN(createWorkDto.year)) {
+        throw new Error('年份必须是有效数字');
+      }
+
       const result = await this.museumService.createWork(createWorkDto, files);
       
-      console.log('创建成功:', result);
+      console.log('创建成功');
       console.log('=== 创建作品请求结束 ===');
       
       return {
@@ -74,12 +133,10 @@ export class MuseumController {
     } catch (error) {
       console.error('=== 创建作品失败 ===');
       console.error('错误详情:', error);
-      console.error('错误堆栈:', error.stack);
       throw error;
     }
   }
 
-  // 添加一个简化的测试接口
   @Post('works/simple')
   @ApiOperation({ summary: '创建作品（简化测试版）' })
   async createWorkSimple(@Body() createWorkDto: CreateWorkDto) {

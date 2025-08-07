@@ -19,9 +19,17 @@ import { MuseumModule } from './modules/museum/museum.module';
       }),
       inject: [ConfigService],
     }),
+    // 修改静态文件服务配置
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
+      serveStaticOptions: {
+        index: false,
+        setHeaders: (res) => {
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+        },
+      },
     }),
     MuseumModule,
   ],
