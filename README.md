@@ -38,6 +38,8 @@
 
 GitHub仓库：https://github.com/tyrone1688/metaverse-learning-hub.git
 
+相关文档附件已经上传
+
 项目详细信息请查看仓库中的文档：
 
 - README.md - 项目概述
