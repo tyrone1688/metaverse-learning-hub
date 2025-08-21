@@ -1,192 +1,268 @@
+const loadWorks = async () => {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      limit: pageSize.value,
+      sortBy: sortBy.value
+    }
+    
+    if (searchQuery.value) {
+      params.search = searchQuery.value
+    }
+    if (filterYear.value) {
+      params.year = filterYear.value
+    }
+    if (filterStatus.value) {
+      params.status = filterStatus.value
+    }
+    
+    const response = await museumApi.getWorks(params)
+    works.value = response.data.items || response.data
+    totalWorks.value = response.data.total || works.value.length
+    
+    // 调试：打印第一个作品的数据结构
+    if (works.value.length > 0) {
+      console.log('作品数据示例:', works.value[0])
+      console.log('作品ID字段:', works.value[0]._id || works.value[0].id)
+    }
+  } catch (error) {
+    console.error('加载作品失败:', error)<!-- src/views/MuseumView.vue -->
 <template>
   <div class="museum-container">
     <!-- 页面头部 -->
     <div class="museum-header">
-      <h1 class="title">数字馆</h1>
-      <p class="subtitle">展示学校优秀获奖作品</p>
+      <h1 class="museum-title">数字博物馆 - 作品展示</h1>
+      <div class="header-actions">
+        <el-button type="primary" @click="openCreateDialog" :icon="Plus">
+          创建作品
+        </el-button>
+        <el-button @click="refreshList" :icon="Refresh">
+          刷新
+        </el-button>
+        <el-button @click="goToModelTest" :icon="Box">
+          3D测试
+        </el-button>
+      </div>
     </div>
 
-    <!-- 搜索和筛选区域 -->
-    <div class="search-filter-section">
-      <el-row :gutter="20" class="filter-row">
+    <!-- 搜索和筛选栏 -->
+    <div class="filter-bar">
+      <el-row :gutter="20">
         <el-col :span="8">
-          <el-input
-            v-model="searchKeyword"
-            placeholder="搜索作品、作者或学校..."
-            size="large"
+          <el-input 
+            v-model="searchQuery" 
+            placeholder="搜索作品标题、作者或学校..."
+            :prefix-icon="Search"
             clearable
+            @clear="handleSearch"
             @keyup.enter="handleSearch"
-          >
-            <template #append>
-              <el-button @click="handleSearch" :icon="Search" />
-            </template>
-          </el-input>
+          />
         </el-col>
         <el-col :span="4">
-          <el-select v-model="filters.category" placeholder="选择分类" clearable @change="handleFilter">
-            <el-option
-              v-for="category in categories"
-              :key="category"
-              :label="category"
-              :value="category"
+          <el-select v-model="filterYear" placeholder="选择年份" clearable @change="handleSearch">
+            <el-option 
+              v-for="year in yearOptions" 
+              :key="year" 
+              :label="`${year}年`" 
+              :value="year" 
             />
           </el-select>
         </el-col>
         <el-col :span="4">
-          <el-select v-model="filters.year" placeholder="选择年份" clearable @change="handleFilter">
-            <el-option
-              v-for="year in yearOptions"
-              :key="year"
-              :label="year"
-              :value="year"
-            />
-          </el-select>
-        </el-col>
-        <el-col :span="4">
-          <el-select v-model="filters.status" placeholder="状态" clearable @change="handleFilter">
+          <el-select v-model="filterStatus" placeholder="状态筛选" clearable @change="handleSearch">
             <el-option label="已发布" value="published" />
             <el-option label="草稿" value="draft" />
             <el-option label="已归档" value="archived" />
           </el-select>
         </el-col>
         <el-col :span="4">
-          <el-button type="primary" @click="showCreateDialog = true" :icon="Plus">
-            添加作品
+          <el-select v-model="sortBy" placeholder="排序方式" @change="handleSearch">
+            <el-option label="最新创建" value="createdAt" />
+            <el-option label="最多浏览" value="viewCount" />
+            <el-option label="按年份" value="year" />
+          </el-select>
+        </el-col>
+        <el-col :span="4">
+          <el-button type="primary" @click="handleSearch" :icon="Search">
+            搜索
           </el-button>
         </el-col>
       </el-row>
     </div>
 
-    <!-- 作品展示区域 -->
-    <div class="works-section" v-loading="loading">
-      <div v-if="works.length === 0 && !loading" class="empty-state">
-        <el-empty description="暂无作品数据">
-          <el-button type="primary" @click="showCreateDialog = true">
-            创建第一个作品
-          </el-button>
-        </el-empty>
-      </div>
-
-      <div v-else class="works-grid">
-        <div
-          v-for="work in works"
-          :key="work._id"
-          class="work-card"
-          @click="viewWorkDetail(work)"
+    <!-- 作品列表 -->
+    <div v-if="loading" class="loading-container">
+      <el-skeleton :rows="6" animated />
+    </div>
+    
+    <div v-else-if="works.length > 0" class="works-grid">
+      <el-row :gutter="20">
+        <el-col 
+          v-for="work in works" 
+          :key="work._id || work.id" 
+          :xs="24" 
+          :sm="12" 
+          :md="8" 
+          :lg="6"
         >
-          <div class="work-image">
-            <img
-              :src="getImageUrl(work.images[0])"
-              :alt="work.title"
-              @error="handleImageError"
-            />
-            <div class="work-overlay">
-              <el-button type="primary" size="small">查看详情</el-button>
-              <div class="file-indicators">
-                <el-icon v-if="work.audioUrl" class="file-icon audio-icon" title="包含音频">
-                  <Microphone />
-                </el-icon>
-                <el-icon v-if="work.certificateUrl" class="file-icon cert-icon" title="包含证书">
-                  <Document />
-                </el-icon>
-                <el-icon v-if="work.modelUrl" class="file-icon model-icon" title="包含3D模型">
-                  <Box />
-                </el-icon>
-              </div>
-            </div>
-          </div>
-          <div class="work-info">
-            <h3 class="work-title">{{ work.title }}</h3>
-            <p class="work-meta">{{ work.author }} · {{ work.school }}</p>
-            <p class="work-year">{{ work.year }}年</p>
-            <div class="work-tags">
-              <el-tag
-                v-for="tag in work.tags.slice(0, 3)"
-                :key="tag"
-                size="small"
-                type="info"
+          <el-card class="work-card" @click="viewWorkDetail(work._id || work.id)">
+            <!-- 作品图片 -->
+            <div class="work-image">
+              <el-image 
+                v-if="work.images && work.images.length > 0"
+                :src="getImageUrl(work.images[0])"
+                fit="cover"
+                class="card-image"
               >
-                {{ tag }}
-              </el-tag>
-            </div>
-            <div class="work-stats">
-              <span class="view-count">
-                <el-icon><View /></el-icon>
-                {{ work.viewCount }}
-              </span>
-              <div class="action-buttons">
-                <el-button size="small" type="warning" @click.stop="editWork(work)">
-                  <el-icon><Edit /></el-icon>
-                </el-button>
-                <el-button size="small" type="danger" @click.stop="deleteWork(work)">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
+                <template #error>
+                  <div class="image-error">
+                    <el-icon><Picture /></el-icon>
+                  </div>
+                </template>
+              </el-image>
+              <div v-else class="no-image">
+                <el-icon size="48"><Picture /></el-icon>
+                <span>暂无图片</span>
               </div>
-              <el-tag :type="getStatusType(work.status)" size="small">
+              
+              <!-- 状态标签 -->
+              <el-tag 
+                class="status-tag" 
+                :type="getStatusType(work.status)"
+                size="small"
+              >
                 {{ getStatusText(work.status) }}
               </el-tag>
             </div>
-          </div>
-        </div>
-      </div>
+
+            <!-- 作品信息 -->
+            <div class="work-info">
+              <h3 class="work-title">{{ work.title }}</h3>
+              <p class="work-description">{{ work.description }}</p>
+              
+              <div class="work-meta">
+                <div class="meta-item">
+                  <el-icon><User /></el-icon>
+                  <span>{{ work.author }}</span>
+                </div>
+                <div class="meta-item">
+                  <el-icon><School /></el-icon>
+                  <span>{{ work.school }}</span>
+                </div>
+                <div class="meta-item">
+                  <el-icon><Calendar /></el-icon>
+                  <span>{{ work.year }}年</span>
+                </div>
+                <div class="meta-item">
+                  <el-icon><View /></el-icon>
+                  <span>{{ work.viewCount || 0 }}</span>
+                </div>
+              </div>
+
+              <!-- 媒体标识 -->
+              <div class="media-icons">
+                <el-tooltip v-if="work.modelUrl" content="3D模型" placement="top">
+                  <el-icon color="#409EFF"><Box /></el-icon>
+                </el-tooltip>
+                <el-tooltip v-if="work.audioUrl" content="音频" placement="top">
+                  <el-icon color="#67C23A"><Microphone /></el-icon>
+                </el-tooltip>
+                <el-tooltip v-if="work.certificateUrl" content="证书" placement="top">
+                  <el-icon color="#E6A23C"><Document /></el-icon>
+                </el-tooltip>
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="work-actions">
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click.stop="viewWorkDetail(work._id || work.id)"
+              >
+                查看详情
+              </el-button>
+              <el-button 
+                type="danger" 
+                size="small" 
+                @click.stop="deleteWork(work._id || work.id, work.title)"
+              >
+                删除
+              </el-button>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
     </div>
 
-    <!-- 分页器 -->
-    <div class="pagination-section" v-if="works.length > 0">
+    <!-- 空状态 -->
+    <div v-else class="empty-state">
+      <el-empty description="暂无作品数据">
+        <el-button type="primary" @click="openCreateDialog">创建第一个作品</el-button>
+      </el-empty>
+    </div>
+
+    <!-- 分页 -->
+    <div v-if="totalWorks > pageSize" class="pagination-container">
       <el-pagination
-        v-model:current-page="pagination.current"
-        v-model:page-size="pagination.pageSize"
-        :page-sizes="[12, 24, 48]"
-        :total="pagination.total"
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :total="totalWorks"
+        :page-sizes="[12, 24, 48, 96]"
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
+        @current-change="handlePageChange"
       />
     </div>
 
     <!-- 创建作品对话框 -->
-    <WorkCreateDialog
-      v-model:visible="showCreateDialog"
+    <WorkCreateDialog 
+      v-model:visible="createDialogVisible"
       @success="handleCreateSuccess"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, View, Plus, Microphone, Document, Box, Edit, Delete } from '@element-plus/icons-vue'
-import { museumApi, type AwardWork, type GetWorksParams } from '@/services/museum'
-import WorkCreateDialog from '@/components/WorkCreateDialog.vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { 
+  Plus, 
+  Refresh, 
+  Search, 
+  Picture, 
+  User, 
+  School, 
+  Calendar, 
+  View,
+  Box,
+  Microphone,
+  Document
+} from '@element-plus/icons-vue'
+import { museumApi, type AwardWork } from '../services/museum'
+import WorkCreateDialog from '../components/WorkCreateDialog.vue'
 
-// 在 setup 函数中
+// 路由
 const router = useRouter()
 
-// 响应式数据
-const loading = ref(false)
-const searchKeyword = ref('')
-const showCreateDialog = ref(false)
-
+// 数据
 const works = ref<AwardWork[]>([])
-const categories = ref<string[]>([])
-
-const filters = reactive({
-  category: '',
-  year: null as number | null,
-  status: ''
-})
-
-const pagination = reactive({
-  current: 1,
-  pageSize: 12,
-  total: 0
-})
+const loading = ref(false)
+const searchQuery = ref('')
+const filterYear = ref<number | ''>('')
+const filterStatus = ref('')
+const sortBy = ref('createdAt')
+const currentPage = ref(1)
+const pageSize = ref(12)
+const totalWorks = ref(0)
+const createDialogVisible = ref(false)
 
 // 计算属性
 const yearOptions = computed(() => {
   const currentYear = new Date().getFullYear()
-  const years = []
+  const years: number[] = []
   for (let i = currentYear; i >= currentYear - 10; i--) {
     years.push(i)
   }
@@ -194,16 +270,117 @@ const yearOptions = computed(() => {
 })
 
 // 方法
-const getImageUrl = (imagePath: string) => {
-  if (!imagePath) return 'https://via.placeholder.com/300x200?text=暂无图片'
-  return imagePath.startsWith('http') 
-    ? imagePath 
-    : `${import.meta.env.VITE_UPLOAD_URL}/${imagePath}`
+const loadWorks = async () => {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      limit: pageSize.value,
+      sortBy: sortBy.value
+    }
+    
+    if (searchQuery.value) {
+      params.search = searchQuery.value
+    }
+    if (filterYear.value) {
+      params.year = filterYear.value
+    }
+    if (filterStatus.value) {
+      params.status = filterStatus.value
+    }
+    
+    const response = await museumApi.getWorks(params)
+    works.value = response.data.items || response.data
+    totalWorks.value = response.data.total || works.value.length
+  } catch (error) {
+    console.error('加载作品失败:', error)
+    ElMessage.error('加载作品失败')
+  } finally {
+    loading.value = false
+  }
 }
 
-const handleImageError = (event: Event) => {
-  const target = event.target as HTMLImageElement
-  target.src = 'https://via.placeholder.com/300x200?text=暂无图片'
+const handleSearch = () => {
+  currentPage.value = 1
+  loadWorks()
+}
+
+const handlePageChange = (page: number) => {
+  currentPage.value = page
+  loadWorks()
+}
+
+const handleSizeChange = (size: number) => {
+  pageSize.value = size
+  currentPage.value = 1
+  loadWorks()
+}
+
+const refreshList = () => {
+  loadWorks()
+  ElMessage.success('已刷新')
+}
+
+const viewWorkDetail = (id: string) => {
+  console.log('点击查看详情，作品ID:', id)
+  if (!id) {
+    console.error('作品ID为空，无法跳转')
+    ElMessage.error('作品ID无效')
+    return
+  }
+  console.log('准备跳转到:', `/work/${id}`)
+  router.push(`/work/${id}`).then(() => {
+    console.log('路由跳转成功')
+  }).catch((error) => {
+    console.error('路由跳转失败:', error)
+  })
+}
+
+const goToModelTest = () => {
+  router.push('/model-test')
+}
+
+const openCreateDialog = () => {
+  createDialogVisible.value = true
+}
+
+const handleCreateSuccess = () => {
+  loadWorks()
+  ElMessage.success('作品创建成功')
+}
+
+const deleteWork = async (id: string, title: string) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除作品"${title}"吗？此操作不可恢复。`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await museumApi.deleteWork(id)
+    ElMessage.success('删除成功')
+    loadWorks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+const getImageUrl = (imagePath: string) => {
+  if (!imagePath) return ''
+  
+  if (imagePath.startsWith('http')) {
+    return imagePath
+  }
+  
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  return `${baseUrl}/${imagePath.startsWith('uploads/') ? '' : 'uploads/'}${imagePath}`
 }
 
 const getStatusType = (status: string) => {
@@ -220,278 +397,204 @@ const getStatusText = (status: string) => {
     case 'published': return '已发布'
     case 'draft': return '草稿'
     case 'archived': return '已归档'
-    default: return '未知'
-  }
-}
-
-const loadWorks = async () => {
-  loading.value = true
-  try {
-    const params: GetWorksParams = {
-      page: pagination.current,
-      limit: pagination.pageSize,
-      ...filters,
-      keyword: searchKeyword.value || undefined
-    }
-
-    const response = await museumApi.getWorks(params)
-    works.value = response.data
-    pagination.total = response.pagination.total
-  } catch (error) {
-    ElMessage.error('加载作品失败')
-    console.error(error)
-  } finally {
-    loading.value = false
-  }
-}
-
-const loadCategories = async () => {
-  try {
-    const response = await museumApi.getCategories()
-    categories.value = response.data
-  } catch (error) {
-    console.error('加载分类失败:', error)
-  }
-}
-
-const handleSearch = () => {
-  pagination.current = 1
-  loadWorks()
-}
-
-const handleFilter = () => {
-  pagination.current = 1
-  loadWorks()
-}
-
-const handleSizeChange = (size: number) => {
-  pagination.pageSize = size
-  loadWorks()
-}
-
-const handleCurrentChange = (page: number) => {
-  pagination.current = page
-  loadWorks()
-}
-
-const viewWorkDetail = (work: AwardWork) => {
-  router.push(`/museum/work/${work._id}`)
-}
-
-const handleCreateSuccess = () => {
-  showCreateDialog.value = false
-  loadWorks()
-  ElMessage.success('作品创建成功')
-}
-
-const editWork = (work: AwardWork) => {
-  ElMessage.info(`编辑作品：${work.title}（编辑功能开发中）`)
-}
-
-const deleteWork = async (work: AwardWork) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除作品"${work.title}"吗？`,
-      '确认删除',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
-    
-    await museumApi.deleteWork(work._id)
-    ElMessage.success('删除成功')
-    loadWorks()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
+    default: return status
   }
 }
 
 // 生命周期
 onMounted(() => {
   loadWorks()
-  loadCategories()
 })
 </script>
 
 <style scoped>
 .museum-container {
   padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
+  background: #f5f7fa;
+  min-height: 100vh;
 }
 
 .museum-header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.title {
-  font-size: 2.5rem;
-  color: #2c3e50;
-  margin-bottom: 10px;
-}
-
-.subtitle {
-  font-size: 1.1rem;
-  color: #666;
-  margin: 0;
-}
-
-.search-filter-section {
-  margin-bottom: 30px;
-}
-
-.filter-row {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 
-.works-section {
-  min-height: 400px;
+.museum-title {
+  margin: 0;
+  font-size: 28px;
+  color: #303133;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 60px 0;
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-bar {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.loading-container {
+  padding: 40px;
+  background: white;
+  border-radius: 8px;
 }
 
 .works-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
   margin-bottom: 30px;
 }
 
 .work-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  transition: all 0.3s ease;
   cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .work-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .work-image {
   position: relative;
-  height: 180px;
+  width: 100%;
+  height: 200px;
   overflow: hidden;
+  margin: -20px -20px 15px -20px;
 }
 
-.work-image img {
+.card-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.work-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+.image-error,
+.no-image {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s ease;
+  background: #f5f7fa;
+  color: #c0c4cc;
 }
 
-.work-card:hover .work-overlay {
-  opacity: 1;
-}
-
-.file-indicators {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.file-icon {
-  width: 20px;
-  height: 20px;
-  padding: 4px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.audio-icon {
-  color: #e6a23c;
-}
-
-.cert-icon {
-  color: #67c23a;
-}
-
-.model-icon {
-  color: #409eff;
+.status-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
 }
 
 .work-info {
-  padding: 16px;
+  flex: 1;
+  padding: 0 20px;
 }
 
 .work-title {
-  margin: 0 0 8px 0;
-  font-size: 1.1rem;
-  color: #2c3e50;
-  line-height: 1.4;
+  margin: 0 0 10px 0;
+  font-size: 18px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-description {
+  margin: 0 0 15px 0;
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
+  height: 42px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .work-meta {
-  color: #666;
-  font-size: 0.9rem;
-  margin: 4px 0;
-}
-
-.work-year {
-  color: #888;
-  font-size: 0.85rem;
-  margin: 4px 0 8px 0;
-}
-
-.work-tags {
-  margin: 8px 0;
-  min-height: 24px;
-}
-
-.work-tags .el-tag {
-  margin-right: 4px;
-  margin-bottom: 4px;
-}
-
-.work-stats {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 15px;
 }
 
-.view-count {
+.meta-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: #999;
-  font-size: 0.85rem;
+  gap: 5px;
+  font-size: 13px;
+  color: #909399;
 }
 
-.action-buttons {
+.meta-item .el-icon {
+  font-size: 14px;
+}
+
+.media-icons {
   display: flex;
-  gap: 4px;
+  gap: 10px;
+  margin-bottom: 15px;
 }
 
-.pagination-section {
+.media-icons .el-icon {
+  font-size: 20px;
+}
+
+.work-actions {
+  display: flex;
+  gap: 10px;
+  padding: 15px 20px;
+  border-top: 1px solid #ebeef5;
+  margin: 0 -20px -20px -20px;
+}
+
+.work-actions .el-button {
+  flex: 1;
+}
+
+.empty-state {
+  padding: 80px 20px;
+  background: white;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.pagination-container {
   display: flex;
   justify-content: center;
-  margin-top: 40px;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .museum-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .header-actions {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .filter-bar .el-col {
+    margin-bottom: 10px;
+  }
 }
 </style>

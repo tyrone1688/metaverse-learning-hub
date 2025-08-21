@@ -21,7 +21,9 @@ const props = defineProps<{
   defaultAxes?: boolean;
 }>();
 
-const emit = defineEmits<{ (e: 'loaded', payload: any): void }>();
+const emit = defineEmits<{ 
+  (e: 'loaded', payload: any): void 
+}>();
 
 const canvasEl = ref<HTMLCanvasElement|null>(null);
 const loading = ref(false);
@@ -35,19 +37,37 @@ let ctx: any = null;
 
 async function boot() {
   if (!canvasEl.value) return;
-  viewer = createViewer(canvasEl.value, { showGrid: showGrid.value, showAxes: showAxes.value });
-  // @ts-ignore
-  ctx = viewer.ctx;
-  await doLoad(props.fileUrl);
+  try {
+    viewer = createViewer(canvasEl.value, { 
+      showGrid: showGrid.value, 
+      showAxes: showAxes.value 
+    });
+    ctx = viewer.ctx;
+    
+    // 如果有文件URL，立即加载
+    if (props.fileUrl) {
+      await doLoad(props.fileUrl);
+    }
+  } catch (err) {
+    console.error('3D查看器初始化失败:', err);
+    error.value = '3D查看器初始化失败';
+  }
 }
 
 async function doLoad(url: string) {
-  if (!url) return;
-  loading.value = true; progress.value = 0; error.value = undefined;
+  if (!url || !ctx) return;
+  
+  loading.value = true; 
+  progress.value = 0; 
+  error.value = undefined;
+  
   try {
-    const info = await loadGLTF(ctx, url, (p)=>progress.value = p);
+    console.log('开始加载3D模型:', url);
+    const info = await loadGLTF(ctx, url, (p) => progress.value = p);
     emit('loaded', info);
-  } catch (e:any) {
+    console.log('3D模型加载成功');
+  } catch (e: any) {
+    console.error('3D模型加载失败:', e);
     error.value = e?.message || String(e);
   } finally {
     loading.value = false;
@@ -55,19 +75,96 @@ async function doLoad(url: string) {
 }
 
 function resetView() {
-  doLoad(props.fileUrl);
+  if (props.fileUrl) {
+    doLoad(props.fileUrl);
+  }
 }
 
-watch(()=>props.fileUrl, (v)=> { if (v) doLoad(v); });
+// 监听文件URL变化
+watch(() => props.fileUrl, (newUrl) => { 
+  if (newUrl && ctx) {
+    doLoad(newUrl); 
+  }
+});
 
-onMounted(()=> boot());
-onBeforeUnmount(()=> viewer?.dispose());
+// 监听网格和坐标轴显示设置变化
+watch([showGrid, showAxes], ([newGrid, newAxes]) => {
+  if (ctx?.grid) {
+    ctx.grid.visible = newGrid;
+  }
+  if (ctx?.axes) {
+    ctx.axes.visible = newAxes;
+  }
+});
+
+onMounted(() => boot());
+onBeforeUnmount(() => viewer?.dispose());
 </script>
 
 <style scoped>
-.viewer-wrap { display: flex; flex-direction: column; height: 100%; }
-.toolbar { display: flex; gap: 12px; align-items: center; padding: 8px 0; }
-.canvas-box { flex: 1; position: relative; }
-canvas { width: 100%; height: 100%; display: block; }
-.err { color: #c00; }
+.viewer-wrap { 
+  display: flex; 
+  flex-direction: column; 
+  height: 100%; 
+  background: #f8f9fa;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.toolbar { 
+  display: flex; 
+  gap: 12px; 
+  align-items: center; 
+  padding: 12px 16px; 
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+.toolbar button {
+  padding: 6px 12px;
+  background: #409eff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.toolbar button:hover {
+  background: #337ecc;
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.toolbar input[type="checkbox"] {
+  margin: 0;
+}
+
+.canvas-box { 
+  flex: 1; 
+  position: relative;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+canvas { 
+  width: 100%; 
+  height: 100%; 
+  display: block; 
+}
+
+.err { 
+  color: #f56565; 
+  font-weight: 500;
+}
+
+span {
+  color: #4a5568;
+  font-size: 13px;
+}
 </style>

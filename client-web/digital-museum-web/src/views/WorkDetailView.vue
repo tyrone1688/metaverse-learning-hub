@@ -1,3 +1,4 @@
+<!-- src/views/WorkDetailView.vue -->
 <template>
   <div class="work-detail-container">
     <div v-if="loading" class="loading-wrapper">
@@ -42,7 +43,7 @@
             </span>
             <span class="meta-item">
               <el-icon><View /></el-icon>
-              {{ work.viewCount }} 次浏览
+              {{ work.viewCount || 0 }} 次浏览
             </span>
           </div>
         </div>
@@ -60,17 +61,17 @@
                   <el-icon><Box /></el-icon>
                   3D模型展示
                 </h3>
-                <ModelViewer 
-                  :model-url="modelUrl"
-                  :width="800"
-                  :height="600"
-                  :show-controls="true"
-                  background-color="#f8f9fa"
-                />
+                <!-- 使用新的ModelViewer组件 -->
+                <div class="model-viewer-wrapper">
+                  <ModelViewer 
+                    :model-url="getFileUrl(work.modelUrl)" 
+                    :show-info="true"
+                  />
+                </div>
               </div>
 
               <!-- 图片展示 -->
-              <div v-if="work.images.length > 0" class="media-item">
+              <div v-if="work.images && work.images.length > 0" class="media-item">
                 <h3 class="section-title">
                   <el-icon><Picture /></el-icon>
                   作品图片 ({{ work.images.length }})
@@ -99,10 +100,22 @@
                   <audio 
                     :src="getFileUrl(work.audioUrl)" 
                     controls 
+                    preload="metadata"
                     class="custom-audio"
                   >
                     您的浏览器不支持音频播放。
                   </audio>
+                  <div class="audio-info">
+                    <el-button 
+                      size="small" 
+                      type="primary" 
+                      plain
+                      @click="downloadFile(work.audioUrl, '讲解音频.mp3')"
+                    >
+                      <el-icon><Download /></el-icon>
+                      下载音频
+                    </el-button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -114,11 +127,11 @@
               <!-- 作品描述 -->
               <div class="info-card">
                 <h3 class="card-title">作品描述</h3>
-                <p class="description">{{ work.description }}</p>
+                <p class="description">{{ work.description || '暂无描述' }}</p>
               </div>
 
               <!-- 作品标签 -->
-              <div class="info-card" v-if="work.tags.length > 0">
+              <div class="info-card" v-if="work.tags && work.tags.length > 0">
                 <h3 class="card-title">标签</h3>
                 <div class="tags-container">
                   <el-tag
@@ -147,6 +160,29 @@
                     class="certificate-image"
                     :preview-src-list="[getFileUrl(work.certificateUrl)]"
                   />
+                  <div v-else-if="isCertificatePDF(work.certificateUrl)" class="certificate-pdf">
+                    <el-icon class="file-icon"><Document /></el-icon>
+                    <div class="file-info">
+                      <p>PDF证书文件</p>
+                      <el-button-group size="small">
+                        <el-button 
+                          type="primary" 
+                          @click="viewPDFInNewWindow(work.certificateUrl)"
+                        >
+                          <el-icon><View /></el-icon>
+                          在线预览
+                        </el-button>
+                        <el-button 
+                          type="primary" 
+                          plain
+                          @click="downloadFile(work.certificateUrl, '获奖证书.pdf')"
+                        >
+                          <el-icon><Download /></el-icon>
+                          下载
+                        </el-button>
+                      </el-button-group>
+                    </div>
+                  </div>
                   <div v-else class="certificate-file">
                     <el-icon class="file-icon"><Document /></el-icon>
                     <div class="file-info">
@@ -200,20 +236,18 @@
         </template>
       </el-result>
     </div>
-  </div>
-    <!-- 你原有的详情内容... -->
-  <div style="height: 600px; border: 1px solid #eee; margin-top: 16px;">
-    <RealModelViewer :fileUrl="work.modelUrl" :defaultGrid="true" :defaultAxes="false"
-                     @loaded="(info)=>console.log('模型信息', info)" />
+    <!-- 编辑作品对话框 -->
+    <WorkEditDialog 
+      v-if="editDialogVisible"
+      v-model:visible="editDialogVisible"
+      :work="work"
+      @success="handleEditSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import RealModelViewer from '@/components/RealModelViewer.vue';
-const modelUrl = ref<string>(
-  'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Fox/glTF-Binary/Fox.glb'
-)
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
@@ -230,8 +264,9 @@ import {
   Document,
   Download
 } from '@element-plus/icons-vue'
-import { museumApi, type AwardWork } from '@/services/museum'
-import ModelViewer from '@/components/ModelViewer.vue'
+import { museumApi, type AwardWork } from '../services/museum'
+import ModelViewer from '../components/ModelViewer.vue'
+import WorkEditDialog from '../components/WorkEditDialog.vue'
 
 // 路由
 const route = useRoute()
@@ -240,13 +275,23 @@ const router = useRouter()
 // 响应式数据
 const loading = ref(false)
 const work = ref<AwardWork | null>(null)
+const currentWorkId = ref<string>('')
+const editDialogVisible = ref(false)
 
-// 方法
+// 方法 - 先定义 loadWork 函数
 const loadWork = async (id: string) => {
+  if (!id) {
+    console.error('作品ID为空')
+    work.value = null
+    return
+  }
+
   loading.value = true
   try {
+    console.log('正在加载作品 ID:', id)
     const response = await museumApi.getWork(id)
     work.value = response.data
+    console.log('作品加载成功:', work.value)
   } catch (error) {
     console.error('加载作品失败:', error)
     ElMessage.error('加载作品失败')
@@ -256,12 +301,35 @@ const loadWork = async (id: string) => {
   }
 }
 
+// 监听路由参数变化 - 在 loadWork 定义之后
+watch(() => route.params.id, (newId) => {
+  if (newId && typeof newId === 'string') {
+    currentWorkId.value = newId
+    loadWork(newId)
+  }
+}, { immediate: true })
+
 const goBack = () => {
   router.push('/museum')
 }
 
 const editWork = () => {
-  ElMessage.info('编辑功能开发中...')
+  if (!work.value) return;
+  
+  // 将作品数据存储到 sessionStorage
+  sessionStorage.setItem('editWork', JSON.stringify(work.value));
+  
+  // 打开编辑对话框
+  editDialogVisible.value = true;
+}
+
+const handleEditSuccess = () => {
+  editDialogVisible.value = false;
+  ElMessage.success('作品更新成功');
+  // 重新加载作品数据
+  if (currentWorkId.value) {
+    loadWork(currentWorkId.value);
+  }
 }
 
 const deleteWork = async () => {
@@ -309,17 +377,15 @@ const getStatusText = (status: string) => {
 const getFileUrl = (filePath: string) => {
   if (!filePath) return ''
   
-  const baseUrl = 'http://localhost:3000' // 直接使用后端地址
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
   let fullUrl = ''
   
   if (filePath.startsWith('http')) {
     fullUrl = filePath
   } else {
-    // 如果路径已经包含 uploads，直接拼接
     if (filePath.startsWith('uploads/')) {
       fullUrl = `${baseUrl}/${filePath}`
     } else {
-      // 如果路径不包含 uploads，添加 uploads 前缀
       fullUrl = `${baseUrl}/uploads/${filePath}`
     }
   }
@@ -327,8 +393,18 @@ const getFileUrl = (filePath: string) => {
   console.log(`文件路径转换: ${filePath} -> ${fullUrl}`)
   return fullUrl
 }
+
 const isCertificateImage = (filePath: string) => {
   return /\.(jpg|jpeg|png|gif)$/i.test(filePath)
+}
+
+const isCertificatePDF = (filePath: string) => {
+  return /\.pdf$/i.test(filePath)
+}
+
+const viewPDFInNewWindow = (filePath: string) => {
+  const url = getFileUrl(filePath)
+  window.open(url, '_blank')
 }
 
 const downloadFile = (filePath: string, fileName: string) => {
@@ -340,6 +416,7 @@ const downloadFile = (filePath: string, fileName: string) => {
 }
 
 const formatDate = (dateString: string) => {
+  if (!dateString) return '未知'
   return new Date(dateString).toLocaleString('zh-CN')
 }
 
@@ -347,7 +424,7 @@ const getFileCount = () => {
   if (!work.value) return 0
   
   let count = 0
-  if (work.value.images.length > 0) count += work.value.images.length
+  if (work.value.images && work.value.images.length > 0) count += work.value.images.length
   if (work.value.audioUrl) count += 1
   if (work.value.certificateUrl) count += 1
   if (work.value.modelUrl) count += 1
@@ -359,7 +436,11 @@ const getFileCount = () => {
 onMounted(() => {
   const id = route.params.id as string
   if (id) {
+    currentWorkId.value = id
     loadWork(id)
+  } else {
+    console.error('路由参数中没有作品ID')
+    work.value = null
   }
 })
 </script>
@@ -455,6 +536,15 @@ onMounted(() => {
   padding: 20px;
 }
 
+/* 3D模型查看器容器样式 */
+.model-viewer-wrapper {
+  height: 600px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
 .image-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -475,6 +565,22 @@ onMounted(() => {
 .custom-audio {
   width: 100%;
   height: 50px;
+  margin-bottom: 10px;
+}
+
+.audio-info {
+  margin-top: 10px;
+}
+
+.certificate-pdf {
+  text-align: center;
+  padding: 20px;
+}
+
+.certificate-pdf .file-icon {
+  font-size: 3rem;
+  color: #e6534a;
+  margin-bottom: 15px;
 }
 
 .info-sidebar {

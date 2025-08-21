@@ -69,4 +69,12 @@ export const museumApi = {
   // 搜索作品
   searchWorks: (keyword: string) =>
     api.get('/api/museum/search', { params: { keyword } }),
+  // src/services/museum.ts 中添加 updateWork 方法
+
+  // 更新作品
+  updateWork(id: string, data: Partial<CreateWorkDto>) {
+    return api.put<AwardWork>(`/museum/works/${id}`, data);
+  },
+
+  // ... 其他方法
 }

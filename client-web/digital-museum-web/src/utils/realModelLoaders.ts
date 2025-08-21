@@ -7,6 +7,8 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader }  from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { OBJLoader }   from 'three/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader }   from 'three/examples/jsm/loaders/MTLLoader.js';
 
 type ViewerCtx = {
   renderer: WebGLRenderer;
@@ -87,25 +89,41 @@ export function createViewer(canvas: HTMLCanvasElement, opts?: {
   };
 }
 
-export async function loadGLTF(ctx: ViewerCtx, url: string, onProgress?: (p: number)=>void) {
-  // 卸载旧模型
-  if (ctx.currentRoot) {
-    ctx.scene.remove(ctx.currentRoot);
-    ctx.currentRoot.traverse?.((o: any)=> {
-      if (o.geometry) o.geometry.dispose?.();
-      if (o.material) {
-        if (Array.isArray(o.material)) o.material.forEach((m:any)=>m.dispose?.());
-        else o.material.dispose?.();
-      }
-    });
-    ctx.currentRoot = undefined;
-    ctx.mixer = undefined;
-  }
+function disposeCurrent(ctx: ViewerCtx) {
+  if (!ctx.currentRoot) return;
+  ctx.scene.remove(ctx.currentRoot);
+  ctx.currentRoot.traverse?.((o: any)=> {
+    if (o.geometry) o.geometry.dispose?.();
+    if (o.material) {
+      if (Array.isArray(o.material)) o.material.forEach((m:any)=>m.dispose?.());
+      else o.material.dispose?.();
+    }
+  });
+  ctx.currentRoot = undefined;
+  ctx.mixer = undefined;
+}
 
-  // === 关键：这里设置 Draco 解码器路径 ===
+function fitCameraToObject(ctx: ViewerCtx, obj: any) {
+  const box = new Box3().setFromObject(obj);
+  const size = new Vector3(); const center = new Vector3();
+  box.getSize(size); box.getCenter(center);
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const fitDist = maxDim / (2 * Math.tan((Math.PI * ctx.camera.fov) / 360));
+  const dir = new Vector3(1, 1, 1).normalize();
+  const newPos = center.clone().addScaledVector(dir, fitDist * 1.5);
+  ctx.camera.position.copy(newPos);
+  ctx.controls.target.copy(center);
+  ctx.controls.update();
+  return { box, size };
+}
+
+/** GLTF/GLB + Draco */
+export async function loadGLTF(ctx: ViewerCtx, url: string, onProgress?: (p: number)=>void) {
+  disposeCurrent(ctx);
+
   const gltfLoader = new GLTFLoader();
   const draco = new DRACOLoader();
-  // 如果部署根路径是 / ，用 '/draco/'；若是子路径，改成 import.meta.env.BASE_URL + 'draco/'
+  // 若部署在子路径，比如 /museum/，可改为：import.meta.env.BASE_URL + 'draco/'
   draco.setDecoderPath('/draco/');
   gltfLoader.setDRACOLoader(draco);
 
@@ -115,29 +133,17 @@ export async function loadGLTF(ctx: ViewerCtx, url: string, onProgress?: (p: num
     }, reject);
   });
 
-  const root = gltf.scene || gltf.scenes[0];
+  const root = gltf.scene || gltf.scenes?.[0];
+  if (!root) throw new Error('GLTF 场景为空');
   root.traverse((o:any)=>{
-    if (o.isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-    }
+    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
   ctx.scene.add(root);
   ctx.currentRoot = root;
 
-  // 自适应相机
-  const box = new Box3().setFromObject(root);
-  const size = new Vector3(); const center = new Vector3();
-  box.getSize(size); box.getCenter(center);
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const fitDist = maxDim / (2 * Math.tan((Math.PI * ctx.camera.fov) / 360));
-  const dir = new Vector3(1, 1, 1).normalize();
-  const newPos = center.clone().addScaledVector(dir, fitDist * 1.5);
-  ctx.camera.position.copy(newPos);
-  ctx.controls.target.copy(center);
-  ctx.controls.update();
+  const { box, size } = fitCameraToObject(ctx, root);
 
-  // 动画（有就播放第一个）
+  // 自动播第一个动画（如果存在）
   if (gltf.animations?.length) {
     const { AnimationMixer, LoopRepeat } = await import('three');
     ctx.mixer = new AnimationMixer(root);
@@ -159,5 +165,70 @@ export async function loadGLTF(ctx: ViewerCtx, url: string, onProgress?: (p: num
     bbox: { min: box.min.clone(), max: box.max.clone(), size },
     nodeCount: root.children.length,
     hasAnimation: !!gltf.animations?.length
+  };
+}
+
+/** OBJ（自动尝试同名 MTL + 贴图；失败则回退“纯 OBJ”） */
+export async function loadOBJ(ctx: ViewerCtx, url: string, onProgress?: (p:number)=>void) {
+  disposeCurrent(ctx);
+
+  // 解析 URL：目录、基础名、?mtl=xxx.mtl
+  const cleanUrl = url.split('#')[0];
+  const [pathPart, queryPart] = cleanUrl.split('?');
+  const parts = pathPart.split('/');
+  const fileName = parts.pop() || '';
+  const dir = parts.join('/') + (parts.length ? '/' : '');
+  const base = fileName.replace(/\.[^/.]+$/, '');     // 去后缀
+  const ext = fileName.split('.').pop()?.toLowerCase();
+
+  // 优先：?mtl=xxx.mtl，其次：同目录同名 .mtl
+  const query = new URLSearchParams(queryPart || '');
+  const mtlFromQuery = query.get('mtl') || '';
+  const mtlUrl = mtlFromQuery
+    ? (mtlFromQuery.startsWith('http') ? mtlFromQuery : dir + mtlFromQuery)
+    : (dir + base + '.mtl');
+
+  const objLoader = new OBJLoader();
+
+  // 尝试加载 MTL
+  let usedMTL = false;
+  try {
+    const mtlLoader = new MTLLoader();
+    // 纹理查找目录：使用 .mtl 所在目录
+    const texDir = mtlUrl.split('?')[0].split('#')[0].replace(/[^/]+$/, '');
+    mtlLoader.setResourcePath(texDir);
+    const materials = await new Promise<any>((resolve, reject)=>{
+      mtlLoader.load(mtlUrl, (mats)=>{
+        mats.preload();
+        resolve(mats);
+      }, undefined, reject);
+    });
+    objLoader.setMaterials(materials);
+    usedMTL = true;
+  } catch {
+    // 加载 MTL 失败：继续走无材质 OBJ
+  }
+
+  // 加载 OBJ
+  const obj = await new Promise<any>((resolve, reject)=>{
+    objLoader.load(url, resolve, (e)=>{
+      if (e.total) onProgress?.(e.loaded / e.total);
+    }, reject);
+  });
+
+  // 基本属性
+  obj.traverse((o:any)=>{
+    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+  });
+
+  ctx.scene.add(obj);
+  ctx.currentRoot = obj;
+
+  const { box, size } = fitCameraToObject(ctx, obj);
+
+  return {
+    bbox: { min: box.min.clone(), max: box.max.clone(), size },
+    nodeCount: obj.children.length,
+    usedMTL
   };
 }

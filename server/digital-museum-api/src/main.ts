@@ -1,43 +1,27 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import * as path from 'path';
+import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // 启用 CORS
+  // 允许前端本地开发端口访问
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:8080', 'http://localhost:5173', 'http://localhost:5174'],
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
     credentials: true,
   });
 
-  // 全局验证管道
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
+  /**
+   * 映射静态目录：
+   * 将 {项目根}/uploads 作为静态资源目录，挂载到 /uploads 前缀
+   * 注意：用 process.cwd()，避免编译到 dist 后 __dirname 变化导致路径找不到
+   */
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  app.use('/uploads', express.static(uploadsDir));
 
-  // Swagger 文档配置
-  const config = new DocumentBuilder()
-    .setTitle('数字馆 API')
-    .setDescription('元宇宙教学平台 - 数字馆模块 API 文档')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
-
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
-  
-  console.log(`🚀 服务器启动成功: http://localhost:${port}`);
-  console.log(`📚 API 文档地址: http://localhost:${port}/api/docs`);
+  await app.listen(3000);
+  console.log('[digital-museum-api] listening on http://localhost:3000');
+  console.log('[static] /uploads =>', uploadsDir);
 }
-
 bootstrap();

@@ -1,598 +1,487 @@
+<!-- src/components/WorkCreateDialog.vue -->
 <template>
   <el-dialog
     v-model="dialogVisible"
-    title="创建新作品"
-    width="900px"
-    :before-close="handleClose"
+    title="创建作品"
+    width="800px"
     :close-on-click-modal="false"
-    destroy-on-close
+    @close="handleClose"
   >
     <el-form
       ref="formRef"
-      :model="formData"
-      :rules="formRules"
+      :model="form"
+      :rules="rules"
       label-width="100px"
-      class="create-form"
+      class="work-form"
     >
       <!-- 基本信息 -->
-      <div class="form-section">
-        <h4 class="section-title">基本信息</h4>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="作品标题" prop="title">
-              <el-input v-model="formData.title" placeholder="请输入作品标题" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="作品分类" prop="category">
-              <el-input v-model="formData.category" placeholder="如：人工智能、机器人等" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="作者" prop="author">
-              <el-input v-model="formData.author" placeholder="请输入作者姓名" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="学校" prop="school">
-              <el-input v-model="formData.school" placeholder="请输入学校名称" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="获奖年份" prop="year">
-              <el-date-picker
-                v-model="formData.year"
-                type="year"
-                placeholder="选择年份"
-                value-format="YYYY"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="状态" prop="status">
-              <el-select v-model="formData.status" placeholder="选择状态" style="width: 100%">
-                <el-option label="草稿" value="draft" />
-                <el-option label="已发布" value="published" />
-                <el-option label="已归档" value="archived" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item label="作品描述" prop="description">
-          <el-input
-            v-model="formData.description"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入作品描述"
-          />
-        </el-form-item>
-
-        <el-form-item label="标签">
-          <div class="tags-container">
-            <el-tag
-              v-for="tag in formData.tags"
-              :key="tag"
-              closable
-              @close="removeTag(tag)"
-              class="tag-item"
-            >
-              {{ tag }}
-            </el-tag>
-            <el-input
-              v-if="inputVisible"
-              ref="InputRef"
-              v-model="inputValue"
-              size="small"
-              class="tag-input"
-              @keyup.enter="handleInputConfirm"
-              @blur="handleInputConfirm"
+      <el-divider content-position="left">基本信息</el-divider>
+      
+      <el-form-item label="作品标题" prop="title">
+        <el-input v-model="form.title" placeholder="请输入作品标题" />
+      </el-form-item>
+      
+      <el-form-item label="作品描述" prop="description">
+        <el-input
+          v-model="form.description"
+          type="textarea"
+          :rows="3"
+          placeholder="请输入作品描述"
+        />
+      </el-form-item>
+      
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="作者姓名" prop="author">
+            <el-input v-model="form.author" placeholder="请输入作者姓名" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="所属学校" prop="school">
+            <el-input v-model="form.school" placeholder="请输入学校名称" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="创作年份" prop="year">
+            <el-date-picker
+              v-model="form.year"
+              type="year"
+              placeholder="选择年份"
+              format="YYYY"
+              value-format="YYYY"
+              style="width: 100%"
             />
-            <el-button v-else size="small" @click="showInput" class="new-tag-btn">
-              <el-icon><Plus /></el-icon>
-              添加标签
-            </el-button>
-          </div>
-        </el-form-item>
-      </div>
-
-      <!-- 文件上传区域 -->
-      <div class="form-section">
-        <h4 class="section-title">文件上传</h4>
-        
-        <!-- 作品图片 -->
-        <el-form-item label="作品图片">
-          <div class="upload-section">
-            <el-upload
-              v-model:file-list="imageFileList"
-              action="#"
-              list-type="picture-card"
-              :auto-upload="false"
-              :on-preview="handlePictureCardPreview"
-              :on-remove="handleImageRemove"
-              :before-upload="beforeImageUpload"
-              multiple
-              accept="image/*"
-            >
-              <el-icon><Plus /></el-icon>
-            </el-upload>
-            <div class="upload-tip">
-              支持 JPG、PNG、GIF 格式，单个文件不超过 10MB
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="发布状态" prop="status">
+            <el-select v-model="form.status" placeholder="选择状态" style="width: 100%">
+              <el-option label="已发布" value="published" />
+              <el-option label="草稿" value="draft" />
+              <el-option label="已归档" value="archived" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      
+      <el-form-item label="标签">
+        <el-tag
+          v-for="tag in form.tags"
+          :key="tag"
+          closable
+          :disable-transitions="false"
+          @close="handleTagClose(tag)"
+          style="margin-right: 10px"
+        >
+          {{ tag }}
+        </el-tag>
+        <el-input
+          v-if="inputVisible"
+          ref="inputRef"
+          v-model="inputValue"
+          size="small"
+          style="width: 100px"
+          @keyup.enter="handleInputConfirm"
+          @blur="handleInputConfirm"
+        />
+        <el-button v-else size="small" @click="showInput">
+          + 新标签
+        </el-button>
+      </el-form-item>
+      
+      <!-- 媒体文件 -->
+      <el-divider content-position="left">媒体文件</el-divider>
+      
+      <el-form-item label="作品图片">
+        <el-upload
+          v-model:file-list="imageList"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          list-type="picture-card"
+          multiple
+          :limit="9"
+          accept="image/*"
+          :on-success="handleImageSuccess"
+          :on-error="handleUploadError"
+        >
+          <el-icon><Plus /></el-icon>
+          <template #file="{ file }">
+            <div>
+              <img class="el-upload-list__item-thumbnail" :src="file.url" alt="" />
+              <span class="el-upload-list__item-actions">
+                <span
+                  class="el-upload-list__item-preview"
+                  @click="handlePreview(file)"
+                >
+                  <el-icon><ZoomIn /></el-icon>
+                </span>
+                <span
+                  class="el-upload-list__item-delete"
+                  @click="handleRemove(file, imageList)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </span>
+              </span>
             </div>
-          </div>
-        </el-form-item>
-
-        <!-- 讲解音频 -->
-        <el-form-item label="讲解音频">
-          <div class="upload-section">
-            <el-upload
-              v-model:file-list="audioFileList"
-              action="#"
-              :auto-upload="false"
-              :before-upload="beforeAudioUpload"
-              :on-remove="handleAudioRemove"
-              accept="audio/*"
-              class="audio-upload"
-            >
-              <el-button size="small" type="primary">
-                <el-icon><Upload /></el-icon>
-                选择音频文件
-              </el-button>
-            </el-upload>
-            <div class="upload-tip">
-              支持 MP3、WAV 格式，不超过 50MB
+          </template>
+        </el-upload>
+      </el-form-item>
+      
+      <el-form-item label="3D模型">
+        <el-upload
+          v-model:file-list="modelList"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          :limit="1"
+          accept=".gltf,.glb,.obj,.fbx,.stl,.ply"
+          :on-success="handleModelSuccess"
+          :on-error="handleUploadError"
+        >
+          <el-button type="primary">选择3D模型文件</el-button>
+          <template #tip>
+            <div class="el-upload__tip">
+              支持 GLTF, GLB, OBJ, FBX, STL, PLY 格式
             </div>
-          </div>
-        </el-form-item>
-
-        <!-- 获奖证书 -->
-        <el-form-item label="获奖证书">
-          <div class="upload-section">
-            <el-upload
-              v-model:file-list="certificateFileList"
-              action="#"
-              :auto-upload="false"
-              :before-upload="beforeCertificateUpload"
-              :on-remove="handleCertificateRemove"
-              accept=".pdf,.jpg,.jpeg,.png"
-              class="certificate-upload"
-            >
-              <el-button size="small" type="primary">
-                <el-icon><Document /></el-icon>
-                选择证书文件
-              </el-button>
-            </el-upload>
-            <div class="upload-tip">
-              支持 PDF、JPG、PNG 格式，不超过 20MB
+          </template>
+        </el-upload>
+      </el-form-item>
+      
+      <el-form-item label="讲解音频">
+        <el-upload
+          v-model:file-list="audioList"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          :limit="1"
+          accept="audio/*"
+          :on-success="handleAudioSuccess"
+          :on-error="handleUploadError"
+        >
+          <el-button type="primary">选择音频文件</el-button>
+          <template #tip>
+            <div class="el-upload__tip">
+              支持 MP3, WAV, OGG 等音频格式
             </div>
-          </div>
-        </el-form-item>
-
-        <!-- 3D模型 -->
-        <el-form-item label="3D模型">
-          <div class="upload-section">
-            <el-upload
-              v-model:file-list="modelFileList"
-              action="#"
-              :auto-upload="false"
-              :before-upload="beforeModelUpload"
-              :on-remove="handleModelRemove"
-              accept=".obj,.fbx,.gltf,.glb"
-              class="model-upload"
-            >
-              <el-button size="small" type="primary">
-                <el-icon><Box /></el-icon>
-                选择3D模型
-              </el-button>
-            </el-upload>
-            <div class="upload-tip">
-              支持 OBJ、FBX、GLTF、GLB 格式，不超过 100MB
+          </template>
+        </el-upload>
+      </el-form-item>
+      
+      <el-form-item label="获奖证书">
+        <el-upload
+          v-model:file-list="certificateList"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          :limit="1"
+          accept="image/*,.pdf"
+          :on-success="handleCertificateSuccess"
+          :on-error="handleUploadError"
+        >
+          <el-button type="primary">选择证书文件</el-button>
+          <template #tip>
+            <div class="el-upload__tip">
+              支持图片或PDF格式
             </div>
-          </div>
-        </el-form-item>
-      </div>
+          </template>
+        </el-upload>
+      </el-form-item>
     </el-form>
-
+    
     <template #footer>
-      <div class="dialog-footer">
+      <span class="dialog-footer">
         <el-button @click="handleClose">取消</el-button>
         <el-button type="primary" @click="handleSubmit" :loading="submitting">
-          <el-icon><Check /></el-icon>
-          创建作品
+          确定
         </el-button>
-      </div>
+      </span>
     </template>
-
+    
     <!-- 图片预览对话框 -->
-    <el-dialog v-model="previewVisible" title="图片预览" width="800px">
-      <img w-full :src="previewImageUrl" alt="Preview Image" style="width: 100%" />
+    <el-dialog v-model="previewVisible" width="800px">
+      <img :src="previewUrl" alt="Preview" style="width: 100%" />
     </el-dialog>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick, watch } from 'vue'
-import { ElMessage, type FormInstance, type UploadProps, type UploadUserFile } from 'element-plus'
-import { Plus, Upload, Document, Box, Check } from '@element-plus/icons-vue'
-import { museumApi } from '@/services/museum'
+import { ref, watch, computed, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules, UploadFile } from 'element-plus'
+import { Plus, ZoomIn, Delete } from '@element-plus/icons-vue'
+import { museumApi } from '../services/museum'
 
-// Props & Emits
-interface Props {
+// Props
+const props = defineProps<{
   visible: boolean
-}
+}>()
 
-interface Emits {
-  (e: 'update:visible', value: boolean): void
-  (e: 'success'): void
-}
+// Emits
+const emit = defineEmits<{
+  'update:visible': [value: boolean]
+  success: []
+}>()
 
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
-
-// 响应式数据
-const dialogVisible = ref(false)
-const submitting = ref(false)
-const formRef = ref<FormInstance>()
-const InputRef = ref()
-
-const formData = reactive({
-  title: '',
-  description: '',
-  category: '',
-  year: 2024,
-  author: '',
-  school: '',
-  tags: [] as string[],
-  status: 'draft'
+// 对话框可见性
+const dialogVisible = computed({
+  get: () => props.visible,
+  set: (val) => emit('update:visible', val)
 })
 
-const formRules = {
-  title: [{ required: true, message: '请输入作品标题', trigger: 'blur' }],
-  description: [{ required: true, message: '请输入作品描述', trigger: 'blur' }],
-  category: [{ required: true, message: '请输入作品分类', trigger: 'blur' }],
-  author: [{ required: true, message: '请输入作者姓名', trigger: 'blur' }],
-  school: [{ required: true, message: '请输入学校名称', trigger: 'blur' }],
-  year: [{ required: true, message: '请选择获奖年份', trigger: 'change' }],
+// 表单数据
+const formRef = ref<FormInstance>()
+const form = ref({
+  title: '',
+  description: '',
+  author: '',
+  school: '',
+  year: new Date().getFullYear().toString(),
+  status: 'published',
+  tags: [] as string[],
+  images: [] as string[],
+  modelUrl: '',
+  audioUrl: '',
+  certificateUrl: ''
+})
+
+// 表单验证规则
+const rules: FormRules = {
+  title: [
+    { required: true, message: '请输入作品标题', trigger: 'blur' }
+  ],
+  description: [
+    { required: true, message: '请输入作品描述', trigger: 'blur' }
+  ],
+  author: [
+    { required: true, message: '请输入作者姓名', trigger: 'blur' }
+  ],
+  school: [
+    { required: true, message: '请输入学校名称', trigger: 'blur' }
+  ],
+  year: [
+    { required: true, message: '请选择创作年份', trigger: 'change' }
+  ],
+  status: [
+    { required: true, message: '请选择发布状态', trigger: 'change' }
+  ]
 }
-
-// 文件上传相关
-const imageFileList = ref<UploadUserFile[]>([])
-const audioFileList = ref<UploadUserFile[]>([])
-const certificateFileList = ref<UploadUserFile[]>([])
-const modelFileList = ref<UploadUserFile[]>([])
-
-// 图片预览
-const previewVisible = ref(false)
-const previewImageUrl = ref('')
 
 // 标签输入
 const inputVisible = ref(false)
 const inputValue = ref('')
+const inputRef = ref()
 
-// 监听 props 变化
-watch(() => props.visible, (val) => {
-  dialogVisible.value = val
+// 文件列表
+const imageList = ref<UploadFile[]>([])
+const modelList = ref<UploadFile[]>([])
+const audioList = ref<UploadFile[]>([])
+const certificateList = ref<UploadFile[]>([])
+
+// 上传配置
+const uploadUrl = computed(() => {
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  return `${baseUrl}/api/museum/upload`
 })
 
-watch(dialogVisible, (val) => {
-  emit('update:visible', val)
-  if (!val) {
-    resetForm()
+const uploadHeaders = computed(() => {
+  return {
+    // 如果需要认证，在这里添加 token
+    // 'Authorization': `Bearer ${token}`
   }
 })
 
-// 方法
-const resetForm = () => {
-  Object.assign(formData, {
-    title: '',
-    description: '',
-    category: '',
-    year: 2024,
-    author: '',
-    school: '',
-    tags: [],
-    status: 'draft'
-  })
-  imageFileList.value = []
-  audioFileList.value = []
-  certificateFileList.value = []
-  modelFileList.value = []
-  formRef.value?.resetFields()
-}
+// 图片预览
+const previewVisible = ref(false)
+const previewUrl = ref('')
 
+// 提交状态
+const submitting = ref(false)
+
+// 方法
 const handleClose = () => {
   dialogVisible.value = false
+  resetForm()
 }
 
-// 标签相关方法
-const removeTag = (tag: string) => {
-  formData.tags.splice(formData.tags.indexOf(tag), 1)
+const resetForm = () => {
+  formRef.value?.resetFields()
+  form.value = {
+    title: '',
+    description: '',
+    author: '',
+    school: '',
+    year: new Date().getFullYear().toString(),
+    status: 'published',
+    tags: [],
+    images: [],
+    modelUrl: '',
+    audioUrl: '',
+    certificateUrl: ''
+  }
+  imageList.value = []
+  modelList.value = []
+  audioList.value = []
+  certificateList.value = []
+}
+
+const handleTagClose = (tag: string) => {
+  form.value.tags.splice(form.value.tags.indexOf(tag), 1)
 }
 
 const showInput = () => {
   inputVisible.value = true
   nextTick(() => {
-    InputRef.value?.focus()
+    inputRef.value?.focus()
   })
 }
 
 const handleInputConfirm = () => {
-  if (inputValue.value && !formData.tags.includes(inputValue.value)) {
-    formData.tags.push(inputValue.value)
+  if (inputValue.value) {
+    form.value.tags.push(inputValue.value)
   }
   inputVisible.value = false
   inputValue.value = ''
 }
 
-// 图片上传相关
-const handlePictureCardPreview: UploadProps['onPreview'] = (uploadFile) => {
-  previewImageUrl.value = uploadFile.url!
+const handleImageSuccess = (response: any, file: UploadFile) => {
+  if (response.success && response.data) {
+    form.value.images.push(response.data.path)
+  }
+}
+
+const handleModelSuccess = (response: any, file: UploadFile) => {
+  if (response.success && response.data) {
+    form.value.modelUrl = response.data.path
+  }
+}
+
+const handleAudioSuccess = (response: any, file: UploadFile) => {
+  if (response.success && response.data) {
+    form.value.audioUrl = response.data.path
+  }
+}
+
+const handleCertificateSuccess = (response: any, file: UploadFile) => {
+  if (response.success && response.data) {
+    form.value.certificateUrl = response.data.path
+  }
+}
+
+const handleUploadError = (error: any) => {
+  console.error('上传失败:', error)
+  ElMessage.error('文件上传失败')
+}
+
+const handlePreview = (file: UploadFile) => {
+  previewUrl.value = file.url || ''
   previewVisible.value = true
 }
 
-const handleImageRemove = () => {
-  // 图片移除处理
+const handleRemove = (file: UploadFile, fileList: UploadFile[]) => {
+  const index = fileList.indexOf(file)
+  if (index > -1) {
+    fileList.splice(index, 1)
+    // 同时从form.images中移除
+    if (file.response?.data?.path) {
+      const imgIndex = form.value.images.indexOf(file.response.data.path)
+      if (imgIndex > -1) {
+        form.value.images.splice(imgIndex, 1)
+      }
+    }
+  }
 }
 
-const beforeImageUpload: UploadProps['beforeUpload'] = (rawFile) => {
-  const isImage = rawFile.type.startsWith('image/')
-  const isLt10M = rawFile.size / 1024 / 1024 < 10
-
-  if (!isImage) {
-    ElMessage.error('只能上传图片文件!')
-    return false
-  }
-  if (!isLt10M) {
-    ElMessage.error('图片大小不能超过 10MB!')
-    return false
-  }
-  return true
-}
-
-// 音频上传相关
-const beforeAudioUpload: UploadProps['beforeUpload'] = (rawFile) => {
-  const isAudio = rawFile.type.startsWith('audio/')
-  const isLt50M = rawFile.size / 1024 / 1024 < 50
-
-  if (!isAudio) {
-    ElMessage.error('只能上传音频文件!')
-    return false
-  }
-  if (!isLt50M) {
-    ElMessage.error('音频文件不能超过 50MB!')
-    return false
-  }
-  return true
-}
-
-const handleAudioRemove = () => {
-  audioFileList.value = []
-}
-
-// 证书上传相关
-const beforeCertificateUpload: UploadProps['beforeUpload'] = (rawFile) => {
-  const validTypes = ['application/pdf', 'image/jpeg', 'image/png']
-  const isValidType = validTypes.includes(rawFile.type)
-  const isLt20M = rawFile.size / 1024 / 1024 < 20
-
-  if (!isValidType) {
-    ElMessage.error('只能上传 PDF、JPG、PNG 格式文件!')
-    return false
-  }
-  if (!isLt20M) {
-    ElMessage.error('文件大小不能超过 20MB!')
-    return false
-  }
-  return true
-}
-
-const handleCertificateRemove = () => {
-  certificateFileList.value = []
-}
-
-// 3D模型上传相关
-const beforeModelUpload: UploadProps['beforeUpload'] = (rawFile) => {
-  const validExtensions = /\.(obj|fbx|gltf|glb)$/i
-  const isValidType = validExtensions.test(rawFile.name)
-  const isLt100M = rawFile.size / 1024 / 1024 < 100
-
-  if (!isValidType) {
-    ElMessage.error('只能上传 OBJ、FBX、GLTF、GLB 格式文件!')
-    return false
-  }
-  if (!isLt100M) {
-    ElMessage.error('模型文件不能超过 100MB!')
-    return false
-  }
-  return true
-}
-
-const handleModelRemove = () => {
-  modelFileList.value = []
-}
-
-// 提交表单
 const handleSubmit = async () => {
-  console.log('=== 开始提交表单 ===')
-  console.log('表单数据:', formData)
-
   if (!formRef.value) return
-
-  const isValid = await formRef.value.validate().catch(() => false)
-  if (!isValid) {
-    console.log('表单验证失败')
-    return
-  }
-
-  console.log('表单验证通过')
-  submitting.value = true
-
-  try {
-    const formDataToSubmit = new FormData()
-    
-    // 添加基本信息 - 确保数据类型正确
-    formDataToSubmit.append('title', formData.title)
-    formDataToSubmit.append('description', formData.description)
-    formDataToSubmit.append('category', formData.category)
-    formDataToSubmit.append('author', formData.author)
-    formDataToSubmit.append('school', formData.school)
-    formDataToSubmit.append('year', String(formData.year))
-    formDataToSubmit.append('status', formData.status)
-    
-    // 处理标签数组
-    if (formData.tags && formData.tags.length > 0) {
-      formData.tags.forEach(tag => {
-        formDataToSubmit.append('tags', tag)
-      })
-    } else {
-      formDataToSubmit.append('tags', '')
+  
+  await formRef.value.validate(async (valid) => {
+    if (valid) {
+      submitting.value = true
+      try {
+        // 转换年份为数字
+        const submitData = {
+          ...form.value,
+          year: parseInt(form.value.year)
+        }
+        
+        await museumApi.createWork(submitData)
+        ElMessage.success('作品创建成功')
+        emit('success')
+        handleClose()
+      } catch (error) {
+        console.error('创建作品失败:', error)
+        ElMessage.error('创建作品失败')
+      } finally {
+        submitting.value = false
+      }
     }
-
-    console.log('基本信息已添加到FormData')
-
-    // 添加文件
-    let fileCount = 0
-    
-    imageFileList.value.forEach((file, index) => {
-      if (file.raw) {
-        formDataToSubmit.append('files', file.raw)
-        console.log(`添加图片文件 ${index}:`, file.name)
-        fileCount++
-      }
-    })
-
-    audioFileList.value.forEach((file, index) => {
-      if (file.raw) {
-        formDataToSubmit.append('files', file.raw)
-        console.log(`添加音频文件 ${index}:`, file.name)
-        fileCount++
-      }
-    })
-
-    certificateFileList.value.forEach((file, index) => {
-      if (file.raw) {
-        formDataToSubmit.append('files', file.raw)
-        console.log(`添加证书文件 ${index}:`, file.name)
-        fileCount++
-      }
-    })
-
-    modelFileList.value.forEach((file, index) => {
-      if (file.raw) {
-        formDataToSubmit.append('files', file.raw)
-        console.log(`添加模型文件 ${index}:`, file.name)
-        fileCount++
-      }
-    })
-
-    console.log(`总共添加了 ${fileCount} 个文件`)
-
-    console.log('准备发送请求...')
-    await museumApi.createWork(formDataToSubmit)
-    
-    console.log('请求成功')
-    emit('success')
-    ElMessage.success('作品创建成功!')
-  } catch (error) {
-    console.error('创建作品失败:', error)
-    if (error.response?.data?.message) {
-      ElMessage.error(`创建失败: ${error.response.data.message}`)
-    } else {
-      ElMessage.error('创建作品失败')
-    }
-  } finally {
-    submitting.value = false
-  }
+  })
 }
 </script>
 
 <style scoped>
-.create-form {
-  max-height: 70vh;
+.work-form {
+  max-height: 60vh;
   overflow-y: auto;
-  padding-right: 10px;
+  padding-right: 20px;
 }
 
-.form-section {
-  margin-bottom: 30px;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-
-.section-title {
-  margin: 0 0 20px 0;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #409eff;
-  color: #2c3e50;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.tags-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.tag-item {
-  margin: 0;
-}
-
-.tag-input {
-  width: 100px;
-}
-
-.new-tag-btn {
-  border-style: dashed;
-}
-
-.upload-section {
-  width: 100%;
-}
-
-.upload-tip {
-  color: #909399;
-  font-size: 12px;
-  margin-top: 8px;
-  line-height: 1.4;
-}
-
-.audio-upload,
-.certificate-upload,
-.model-upload {
-  margin-bottom: 8px;
+.el-divider {
+  margin: 20px 0;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
-.create-form::-webkit-scrollbar {
-  width: 6px;
+:deep(.el-upload-list--picture-card) {
+  display: flex;
+  flex-wrap: wrap;
 }
 
-.create-form::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+:deep(.el-upload--picture-card) {
+  width: 100px;
+  height: 100px;
 }
 
-.create-form::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+:deep(.el-upload-list__item) {
+  width: 100px;
+  height: 100px;
 }
 
-.create-form::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+.el-upload-list__item-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.el-upload-list__item-actions {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  cursor: default;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.el-upload-list__item:hover .el-upload-list__item-actions {
+  opacity: 1;
+}
+
+.el-upload-list__item-preview,
+.el-upload-list__item-delete {
+  display: inline-flex;
+  cursor: pointer;
+  margin: 0 8px;
+  color: white;
+  font-size: 20px;
 }
 </style>
